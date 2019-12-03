@@ -39,13 +39,15 @@ std::string getHTTPDate();
 
 
 enum HTTPMethod {
-    GET, POST
+    GET, POST, PUT, _unknown
 };
 
 class Request {
     HTTPMethod method;
     std::string path;
     std::string http_version;
+
+    std::string data;
     
     int _sock_fd;
 
@@ -56,6 +58,7 @@ class Request {
 public:
     Request(char* buffer, int sock_fd);
     std::string get_path();
+    std::string get_data();
     boost::optional<std::string> get_header(std::string header);
     HTTPMethod get_method();
 };

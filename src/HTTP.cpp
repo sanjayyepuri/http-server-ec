@@ -47,11 +47,15 @@ Server::Server(int port): _port(port) {
 }
 
 void Server::errHandler(Request &req, Response &res) {
-    res.send(403);
+    res.send(400);
 }
 
 void Server::get(std::string path, Handler handler) {
     this->getHandler = std::pair<std::string, Handler> (path, handler);
+}
+
+void Server::post(std::string path, Handler handler) {
+    this->postHandler = std::pair<std::string, Handler> (path, handler);
 }
 
 void Server::listen() {
@@ -65,7 +69,7 @@ void Server::listen() {
         inc_sock = accept(_srvfd, (struct sockaddr *) &_address, (socklen_t *) &addr_len);
         
         char buffer[BUFFER_SIZE]; // TODO: this buffer may lead to a memory leak.
-//        read(inc_sock, buffer, BUFFER_SIZE);
+        read(inc_sock, buffer, BUFFER_SIZE);
 
         Request requestHeader(buffer, inc_sock);
         Response response(inc_sock); // hand off the socket to the response
@@ -74,7 +78,7 @@ void Server::listen() {
             // TODO do some error handling
             this->getHandler.second(requestHeader, response);
         } else if (requestHeader.get_method() == POST) {
-            this->getHandler.second(requestHeader, response);
+            this->postHandler.second(requestHeader, response);
         } else {
             errHandler(requestHeader, response);
         }
@@ -91,8 +95,10 @@ void Request::parse_buffer(char *buffer) {
     // while ( (dl = s_reader.getline(hstream)) > 0) {
     //     std::cout << "BYTES READ " << dl << "\n";
     // }
+
     std::stringstream hstream (buffer);
     
+    // std::cout << "BUFFER: " << buffer << "\n";
         
     std::string method_str;
     std::getline(hstream, method_str);
@@ -102,14 +108,17 @@ void Request::parse_buffer(char *buffer) {
     
     if (method_str == "GET") {
         this->method = GET;
-    } else if (method_str == "GET") {
+    } else if (method_str == "POST") {
         this->method = POST;
+    } else if (method_str == "PUT") {
+        this->method = PUT;
     } else {
         // TODO ERR handle
         std::cout << "Found unsupported http method: " << method_str << "\n";
+        this->method = _unknown;
     }
     
-    std::cout << this->method << " " << this->path << " " << this->http_version << "\n";
+    // std::cout << this->method << " " << this->path << " " << this->http_version << "\n";
     
     
     for (std::string header; std::getline(hstream, header); ) {
@@ -121,10 +130,14 @@ void Request::parse_buffer(char *buffer) {
         boost::trim(h_substrs[0]);
         boost::trim(h_substrs[1]);
         
-        std::cout << "key: " << h_substrs[0] << " value: " << h_substrs[1] << "\n";
+        // std::cout << "key: " << h_substrs[0] << " value: " << h_substrs[1] << "\n";
         
         this->headers[h_substrs[0]] = h_substrs[1];
     }
+
+    std::string data((std::istreambuf_iterator<char>(hstream)), std::istreambuf_iterator<char>());
+
+    this->data = data;
 }
 
 Request::Request(char *buffer, int sock_fd): _sock_fd(sock_fd) {
@@ -144,6 +157,10 @@ HTTPMethod Request::get_method() {
 
 std::string Request::get_path() {
     return this->path;
+}
+
+std::string Request::get_data() {
+    return this->data;
 }
 
 /* Response Implementation */

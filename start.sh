@@ -1,0 +1,2 @@
+make 
+./bin/server $(pwd)

@@ -30,11 +30,28 @@ boost::optional<std::string> readFile(std::string file_path) {
     if (!ifs.is_open()) {
         return { };
     }
+    try {
+        std::string data((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        ifs.close();
+        return data;
+    }
+    catch (...){
+        ifs.close();
+        return { };
+    }
+}
 
-    std::string data((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    ifs.close();
+bool writeFile(std::string file_path, std::string data) {
+    fs::path p {file_path};
+    fs::ofstream ofs {p};
+
+    if (!ofs.is_open()) {
+        return false;
+    }
     
-    return data;
+    ofs << data;
+
+    return true;
 }
 
 boost::optional<std::vector<std::string>> readHostFile(std::string file_path) {
@@ -58,7 +75,7 @@ boost::optional<std::vector<std::string>> readHostFile(std::string file_path) {
 std::unordered_map<std::string, std::string> create_host_dirs(std::string basedir, std::vector<std::string> dirs) {
     std::unordered_map<std::string, std::string> hostdirs;
     for (std::string dirname : dirs) {
-        std::string p {basedir + dirname};
+        std::string p {basedir + "/" + dirname};
         
         hostdirs[dirname] = p;
         if (!boost::filesystem::create_directory(p)) {
@@ -74,14 +91,24 @@ std::unordered_map<std::string, std::string> create_host_dirs(std::string basedi
 }
 
 int main(int argc, const char * argv[]) {
-    std::string basedir {"/Users/sanjayyepuri/Documents/Source/HTTPServerCpp/"};
-    
-    auto hosts = readHostFile(basedir +"hosts.txt");
+    printf("path %d %s\n", argc, argv[0]);
+ 
+    std::string basedir;
+    if (argc > 1) {
+        basedir = argv[1];
+    } else {
+        basedir = "/Users/sanjayyepuri/Documents/Source/HTTPServerCpp";
+    }
+
+    std::cout << "BASEDIR: " << basedir << "\n";
+
+    auto hosts = readHostFile(basedir +"/hosts.txt");
     
     std::unordered_map<std::string, std::string> host_directories;
     if (hosts) {
         host_directories = create_host_dirs(basedir, *hosts);
     }
+    host_directories["localhost"] = basedir;
     
     http::Server srv { 8080 };
     
@@ -99,6 +126,23 @@ int main(int argc, const char * argv[]) {
             res.send(200, *data);
         } else {
             res.send(404, "ERROR 404\n File not found.");
+        }
+    });
+
+    srv.post("*", [&](http::Request& req, http::Response& res) {
+        std::cout << "POST DATA " << req.get_data() << "\n";
+        
+        std::string path;
+        if (boost::optional<std::string> p = req.get_header("Host")){
+            path = host_directories[*p];
+        } else {
+            path = basedir;
+        }
+
+        if (writeFile(path+req.get_path(), req.get_data())) {
+            res.send(200);
+        } else {
+            res.send(400);
         }
     });
 
