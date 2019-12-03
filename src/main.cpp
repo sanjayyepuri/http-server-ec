@@ -97,7 +97,7 @@ int main(int argc, const char * argv[]) {
     if (argc > 1) {
         basedir = argv[1];
     } else {
-        basedir = "/Users/sanjayyepuri/Documents/Source/HTTPServerCpp";
+        basedir = "/Users/sanjayyepuri/Documents/Source/http-server-ec";
     }
 
     std::cout << "BASEDIR: " << basedir << "\n";
@@ -114,32 +114,56 @@ int main(int argc, const char * argv[]) {
     
     srv.get("*", [&](http::Request& req, http::Response& res) {
         std::string path;
-        if (boost::optional<std::string> p = req.get_header("Host")){
+        if (boost::optional<std::string> p = req.get_header("HOST")){
             path = host_directories[*p];
         } else {
             path = basedir;
         }
         
-        std::cout << "PATH: " << path << "\n";
         
-        if (auto data = readFile(path+req.get_path())) {
+        path = path + req.get_path();
+        printf("[SERVER] GET PATH %s\n", path.c_str());
+        
+        // cache control
+        if (boost::optional<std::string> p = req.get_header("IF-MODIFIED-SINCE")) {
+            struct tm lm;
+            
+            strptime(p.get().c_str(), "%a, %d %b %Y %H:%M:%S %Z", &lm);
+            time_t last_modified = mktime(&lm);
+            
+            if (fs::exists(path)) {
+                time_t file_modified = fs::last_write_time(path);
+                    
+                double time_diff = difftime(last_modified, file_modified);
+                if (time_diff >= 0) {
+                    res.send(304);
+                    return;
+                }
+            }
+        }
+        
+        if (auto data = readFile(path)) {
             res.send(200, *data);
         } else {
             res.send(404, "ERROR 404\n File not found.");
         }
+        
     });
 
     srv.post("*", [&](http::Request& req, http::Response& res) {
-        std::cout << "POST DATA " << req.get_data() << "\n";
-        
+
         std::string path;
-        if (boost::optional<std::string> p = req.get_header("Host")){
+        if (boost::optional<std::string> p = req.get_header("HOST")){
             path = host_directories[*p];
         } else {
             path = basedir;
         }
+        
+        printf("[SERVER] POST PATH %s\n", path.c_str());
 
-        if (writeFile(path+req.get_path(), req.get_data())) {
+        
+        path = path + req.get_path();
+        if (writeFile(path, req.get_data())) {
             res.send(200);
         } else {
             res.send(400);

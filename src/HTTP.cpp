@@ -68,9 +68,9 @@ void Server::listen() {
     for (;;) {
         inc_sock = accept(_srvfd, (struct sockaddr *) &_address, (socklen_t *) &addr_len);
         
-        char buffer[BUFFER_SIZE]; // TODO: this buffer may lead to a memory leak.
-        read(inc_sock, buffer, BUFFER_SIZE);
-
+        std::shared_ptr<char> buffer (new char[BUFFER_SIZE], std::default_delete<char[]>());
+        read(inc_sock, buffer.get(), BUFFER_SIZE);
+        
         Request requestHeader(buffer, inc_sock);
         Response response(inc_sock); // hand off the socket to the response
         
@@ -98,7 +98,7 @@ void Request::parse_buffer(char *buffer) {
 
     std::stringstream hstream (buffer);
     
-    // std::cout << "BUFFER: " << buffer << "\n";
+//    std::cout << "\n---\nBUFFER: \n" << buffer << "\n---\n";
         
     std::string method_str;
     std::getline(hstream, method_str);
@@ -122,17 +122,25 @@ void Request::parse_buffer(char *buffer) {
     
     
     for (std::string header; std::getline(hstream, header); ) {
-        std::vector<std::string> h_substrs;
+//        std::cout << header << "\n";
         
-        boost::split(h_substrs, header, boost::is_any_of(":")); // TODO do a more robust parse of headers        
+        std::string key;
+        std::string value;
         
-        if (h_substrs.size() < 2) break;
-        boost::trim(h_substrs[0]);
-        boost::trim(h_substrs[1]);
+        auto col_idx = header.find_first_of(':');
         
-        // std::cout << "key: " << h_substrs[0] << " value: " << h_substrs[1] << "\n";
+        if (col_idx == std::string::npos) break;
         
-        this->headers[h_substrs[0]] = h_substrs[1];
+        key = header.substr(0, col_idx);
+        value = header.substr(col_idx+1);
+    
+        // normalize everything to
+        boost::to_upper(key);
+        boost::trim(key);
+        boost::trim(value);
+//        std::cout << "key: " << key << " value: " << value << "\n";
+        
+        this->headers[key] = value;
     }
 
     std::string data((std::istreambuf_iterator<char>(hstream)), std::istreambuf_iterator<char>());
@@ -140,8 +148,8 @@ void Request::parse_buffer(char *buffer) {
     this->data = data;
 }
 
-Request::Request(char *buffer, int sock_fd): _sock_fd(sock_fd) {
-    parse_buffer(buffer);
+Request::Request(std::shared_ptr<char> buffer, int sock_fd): _sock_fd(sock_fd) {
+    parse_buffer(buffer.get());
 }
 
 boost::optional<std::string> Request::get_header(std::string header) {
@@ -168,6 +176,7 @@ std::string Request::get_data() {
 std::unordered_map<int, std::string> Response::ResponseCodes =
    {
        {200, "OK"},
+       {304, "Not Modified"},
        {400, "Bad Request"},
        {404, "Not Found"},
        {500, "Internal Server Error"}

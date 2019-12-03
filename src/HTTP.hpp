@@ -18,6 +18,7 @@
 #include <sstream>
 #include <streambuf>
 #include <unordered_map>
+#include <memory>
 
 
 #include <sys/socket.h>
@@ -56,7 +57,7 @@ class Request {
     void parse_buffer(char *buffer);
     
 public:
-    Request(char* buffer, int sock_fd);
+    Request(std::shared_ptr<char> buffer, int sock_fd);
     std::string get_path();
     std::string get_data();
     boost::optional<std::string> get_header(std::string header);
